@@ -66,14 +66,14 @@ func GenerateWeights(opts WeightOptions) {
 	os.MkdirAll(opts.WeightsPath, os.ModePerm)
 
 	// copy the description and sample files to the weights path
-	files, err := weights.ReadDir("weights")
+	files, err := weights.ReadDir("icon_weights")
 	if err != nil {
 		Log.Fatal().Err(err).Msg("Error reading weights directory")
 	}
 
 	for _, file := range files {
 		if _, err := os.Stat(filepath.Join(opts.WeightsPath, file.Name())); err != nil {
-			src, err := weights.Open("weights/" + file.Name())
+			src, err := weights.Open("icon_weights/" + file.Name())
 			if err != nil {
 				Log.Fatal().Err(err).Msg("Error opening file")
 			}

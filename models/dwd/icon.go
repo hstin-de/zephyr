@@ -160,7 +160,7 @@ func (m *IconModel) DowloadParameter(parameter []string) error {
 
 	GenerateWeights(WeightOptions{
 		GridsPath:   "/tmp/gribdl/dwd/grids",
-		WeightsPath: "/home/coding/hstin/zephyr/weights",
+		WeightsPath: "./weights",
 		CdoPath:     "cdo",
 	})
 
