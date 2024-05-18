@@ -15,7 +15,32 @@
 
 ## Getting Started
 
-### Building `zephyr`
+### Docker
+
+Pre-built Docker images are available on GitHub Container Registry. To run `zephyr` in a Docker container, use:
+
+```bash
+docker run ghcr.io/hstin-de/zephyr:latest --help
+```
+
+##### Downloading Weather Data
+To download the newest weather data, run:
+
+```bash
+docker run -v ./data:/app/data -v ./weights:/app/weights ghcr.io/hstin-de/zephyr:latest --download
+```
+Theoretically you dont need to mount the weights directory, but it is recommended to speed up future downloads.
+
+##### Starting the HTTP Server
+To start the HTTP server, run:
+
+```bash
+docker run -p 8081:8081 --pid=host -v ./data:/app/data ghcr.io/hstin-de/zephyr:latest --http
+```
+The Server will start using Preforking and will listen on port 8081. Plese note that the `--pid=host` flag is required to access the host's network stack, and that your host system supports this feature.
+
+
+### Building `zephyr` from Source
 
 Build `zephyr` for production with:
 
@@ -23,15 +48,8 @@ Build `zephyr` for production with:
 make build-prod
 ```
 
-That will create a binary named `zephyr` in the `build/` directory.
+That will create a binary named `zephyr` in the `build/` directory. Run it with `--help` to see available commands and options.
 
-### Running `zephyr`
-
-To see available commands and options, run:
-
-```bash
-./build/zephyr --help
-```
 
 ### Configuration Options
 
