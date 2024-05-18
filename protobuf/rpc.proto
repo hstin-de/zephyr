@@ -1,0 +1,35 @@
+syntax = "proto3";
+
+package forecast;
+
+option go_package = "hstin/zephyr;protobuf";
+
+
+import "google/protobuf/struct.proto";
+
+
+// ForecastResponse is the structure for weather forecast data.
+message ForecastResponse {
+    int64 calculation_time = 1;
+    double latitude = 2;
+    double longitude = 3;
+    int32 utc_offset = 4;
+    string timezone = 5;
+    int64 start_time = 6; // Using int64 as per the updated request
+    map<string, google.protobuf.ListValue> daily = 7;
+    map<string, google.protobuf.ListValue> hourly = 8;
+}
+
+// ForecastRequest is used to pass parameters to the forecast service.
+message ForecastRequest {
+    double lat = 1; // Latitude
+    double lng = 2; // Longitude
+    int32 forecast_days = 3; // Number of days to forecast
+    repeated string parameters = 4; // Additional parameters for the forecast
+}
+
+// Service definition for Forecast
+service ForecastService {
+    // Retrieves weather forecast based on the given request.
+    rpc GetForecast(ForecastRequest) returns (ForecastResponse) {}
+}
