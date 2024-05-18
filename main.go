@@ -13,6 +13,8 @@ import (
 func main() {
 
 	app := &cli.App{
+		Name:  "zephyr - A High-Performance Weather API Server",
+		UsageText: "zephyr [global options]",
 		Flags: []cli.Flag{
 			&cli.BoolFlag{
 				Name:    "http",
