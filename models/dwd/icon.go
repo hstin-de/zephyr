@@ -5,6 +5,7 @@ import (
 	"hstin/zephyr/common"
 	. "hstin/zephyr/helper"
 	"math"
+	"os"
 	"path"
 	"strings"
 	"sync"
@@ -51,6 +52,10 @@ type IconModelOptions struct {
 func NewIconModel(opt IconModelOptions) *IconModel {
 
 	rootPath := path.Join(opt.RootPath, ModelName)
+
+	if os.MkdirAll(rootPath, os.ModePerm) != nil {
+		Log.Fatal().Msg("Could not create root path for ICON model")
+	}
 
 	return &IconModel{
 		RootPath:      rootPath,
@@ -235,7 +240,7 @@ func (m *IconModel) DowloadParameter(parameter []string) error {
 
 	// Each parameter needs 2.5GB of memory
 	// Disable parallel processing if not enough memory is available
-	if getFreeMemory() < uint64(len(parameter)) * uint64(2.5e9) {
+	if getFreeMemory() < uint64(len(parameter))*uint64(2.5e9) {
 		ParallelMode = false
 		Log.Warn().Msg("Not enough memory for parallel processing, using compatibility mode! Download will take significantly longer!")
 		Log.Warn().Msg("Ensure you have at least 2.5GB of free memory available per parameter!")
