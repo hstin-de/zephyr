@@ -211,12 +211,17 @@ func (m *IconModel) DowloadParameter(parameter []string) error {
 
 	var downloadParams []string = make([]string, len(parameter))
 
+	var toDownload []string = make([]string, 0)
+
 	//convert parameter to DWD parameter
 	for i, p := range parameter {
 		if val, ok := ParameterLookup[p]; ok {
 			downloadParams[i] = val
+			toDownload = append(toDownload, p)
 		}
 	}
+
+	Log.Info().Msg("Downloading parameters: " + strings.Join(toDownload, ", "))
 
 	downloadedGribFiles := StartDWDDownloader(DWDOpenDataDownloaderOptions{
 		ModelName: "icon",
@@ -225,14 +230,16 @@ func (m *IconModel) DowloadParameter(parameter []string) error {
 		Regrid:    true,
 	})
 
+	Log.Info().Msg("Download comlete. Processing parameters")
+
 	ParallelMode := true
 
 	// Each parameter needs 2.5GB of memory
 	// Disable parallel processing if not enough memory is available
-	if common.GetFreeMemory() < uint64(len(parameter))*uint64(2.5e9) {
+	if common.GetFreeMemory() < uint64(len(parameter))*uint64(2e9) {
 		ParallelMode = false
 		Log.Warn().Msg("Not enough memory for parallel processing, using compatibility mode! Download will take significantly longer!")
-		Log.Warn().Msg("Ensure you have at least 2.5GB of free memory available per parameter!")
+		Log.Warn().Msg("Ensure you have at least 2GB of free memory available per parameter!")
 	}
 
 	var wg sync.WaitGroup

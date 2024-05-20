@@ -134,5 +134,5 @@ func GenerateWeights(opts WeightOptions) {
 
 	wg.Wait()
 
-	Log.Info().Msg("Weights ready")
+	Log.Info().Msg("Weights loaded successfully")
 }
