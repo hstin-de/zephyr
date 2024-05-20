@@ -1,15 +1,10 @@
-FROM ghcr.io/hstin-de/cdo
+# Stage 1: Build stage
+FROM golang:1.22.3 AS builder
 
-RUN apt update && apt install -y wget bzip2 build-essential libeccodes-dev file
-
-# Download golang
-RUN wget https://go.dev/dl/go1.22.3.linux-amd64.tar.gz
-
-# Install golang
-RUN rm -rf /usr/local/go && tar -C /usr/local -xzf go1.22.3.linux-amd64.tar.gz
-
-# Set PATH
-ENV PATH=$PATH:/usr/local/go/bin
+# Install dependencies
+RUN apt update && apt install -y wget bzip2 build-essential libeccodes-dev \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app 
 
@@ -22,12 +17,21 @@ COPY . .
 # Build the project
 RUN make build-prod
 
-# Ensure the binary is executable
-RUN chmod +x ./build/zephyr
+# Stage 2: Final stage
+FROM ghcr.io/hstin-de/cdo
 
-# Debugging: Log the existence and type of the binary
-RUN ls -l ./build/zephyr
-RUN file ./build/zephyr
+# Install only necessary runtime dependencies
+RUN apt update && apt install -y libeccodes-dev \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copy the binary from the builder stage
+COPY --from=builder /app/build/zephyr /app/zephyr
+
+# Ensure the binary is executable
+RUN chmod +x ./zephyr
 
 # Set the entry point to the binary
-ENTRYPOINT ["./build/zephyr"]
+ENTRYPOINT ["./zephyr"]
