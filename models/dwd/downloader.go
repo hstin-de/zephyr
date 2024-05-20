@@ -162,7 +162,7 @@ func NewDWDOpenDataDownloader(options DWDOpenDataDownloaderOptions) *DWDOpenData
 		maxStep:         options.MaxStep,
 		regrid:          options.Regrid,
 		modelDetails:    options.ModelDetails,
-		httpClient:      &http.Client{Timeout: 60 * time.Second},
+		httpClient:      &http.Client{Timeout: 5 * time.Minute},
 	}
 }
 
