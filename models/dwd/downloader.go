@@ -207,7 +207,7 @@ func (wdp *DWDOpenDataDownloader) downloadAndProcessFile(url string, retries int
 	resp, err := wdp.httpClient.Get(url)
 	if err != nil {
 		if retries > 0 {
-			Log.Info().Msg("[DL] Retrying...")
+			Log.Info().Msgf("[DL] Retrying... Error: %s", err)
 			return wdp.downloadAndProcessFile(url, retries-1)
 		}
 		return nil, fmt.Errorf("[DL] getting url: %w", err)
@@ -216,7 +216,7 @@ func (wdp *DWDOpenDataDownloader) downloadAndProcessFile(url string, retries int
 
 	if resp.StatusCode != http.StatusOK {
 		if retries > 0 {
-			Log.Info().Msg("[DL] Retrying...")
+			Log.Info().Msgf("[DL] Retrying.... Status code: %d", resp.StatusCode)
 			return wdp.downloadAndProcessFile(url, retries-1)
 		}
 		return nil, fmt.Errorf("[DL] non-200 status code: %d", resp.StatusCode)
@@ -235,7 +235,7 @@ func (wdp *DWDOpenDataDownloader) downloadAndProcessFile(url string, retries int
 
 	if _, err = io.Copy(outputFile, bz2Reader); err != nil {
 		if retries > 0 {
-			Log.Info().Msg("[DL] Retrying...")
+			Log.Info().Msgf("[DL] Retrying.... Error: %s", err)
 			return wdp.downloadAndProcessFile(url, retries-1)
 		}
 		return nil, fmt.Errorf("[DL] copying file: %w", err)
