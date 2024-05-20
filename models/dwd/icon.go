@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/hstin-de/ndfile"
-	"golang.org/x/sys/unix"
 )
 
 const (
@@ -163,16 +162,6 @@ func (m *IconModel) GetValues(parameter []common.ParameterOptions, startTime tim
 	return dailyData, hourlyData, nil
 }
 
-func getFreeMemory() uint64 {
-	var info unix.Sysinfo_t
-	err := unix.Sysinfo(&info)
-	if err != nil {
-		fmt.Println("Error getting system info:", err)
-		return 0
-	}
-	return uint64(info.Freeram) * uint64(info.Unit)
-}
-
 func (m *IconModel) ProcessParameter(param string, downloadedGribFiles map[string]map[int][]byte, wg *sync.WaitGroup) {
 	defer wg.Done()
 	var parsedParameter common.ParameterOptions
@@ -240,7 +229,7 @@ func (m *IconModel) DowloadParameter(parameter []string) error {
 
 	// Each parameter needs 2.5GB of memory
 	// Disable parallel processing if not enough memory is available
-	if getFreeMemory() < uint64(len(parameter))*uint64(2.5e9) {
+	if common.GetFreeMemory() < uint64(len(parameter))*uint64(2.5e9) {
 		ParallelMode = false
 		Log.Warn().Msg("Not enough memory for parallel processing, using compatibility mode! Download will take significantly longer!")
 		Log.Warn().Msg("Ensure you have at least 2.5GB of free memory available per parameter!")
