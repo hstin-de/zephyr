@@ -17,6 +17,7 @@ type ForecastResponse struct {
 	UTCOffset       int                  `json:"utc_offset"`
 	Timezone        string               `json:"timezone"`
 	StartTime       int64                `json:"start_time"`
+	UsedModels      []string             `json:"used_models"`
 	Daily           map[string][]float64 `json:"daily"`
 	Hourly          map[string][]float64 `json:"hourly"`
 	Minitely15      map[string][]float64 `json:"minutely15"`
@@ -71,9 +72,9 @@ func StartServer(port string) {
 
 		_, offset := startTime.Zone()
 
-		model := base.GetBestModel(latitude, longitude)
+		model, _ := base.GetBestModel(latitude, longitude, c.Query("model"))
 
-		dailyParameter, hourlyParameter, err := model.GetValues(matchedParams, startTime, forecastDays, latitude, longitude)
+		dailyParameter, hourlyParameter, usedModels, err := base.GetValues(model, matchedParams, startTime, forecastDays, latitude, longitude)
 		if err != nil {
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Error getting data"})
 		}
@@ -91,6 +92,7 @@ func StartServer(port string) {
 			UTCOffset:       offset * 1000,
 			Timezone:        timezone,
 			StartTime:       startTime.Truncate(24*time.Hour).Unix() * 1000,
+			UsedModels:      usedModels,
 			Daily:           dailyParameter,
 			Hourly:          hourlyParameter,
 			Minitely15:      minutely15,

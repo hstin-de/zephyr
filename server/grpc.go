@@ -39,7 +39,7 @@ func (s *server) GetForecast(ctx context.Context, in *protobuf.ForecastRequest) 
 		}
 	}
 
-	model := base.GetBestModel(in.Lat, in.Lng)
+	model, _ := base.GetBestModel(in.Lat, in.Lng, "")
 
 	timezone := timezonemapper.LatLngToTimezoneString(in.Lat, in.Lng)
 
@@ -52,7 +52,7 @@ func (s *server) GetForecast(ctx context.Context, in *protobuf.ForecastRequest) 
 
 	_, offset := startTime.Zone()
 
-	dailyParameter, hourlyParameter, err := model.GetValues(params, startTime, int(in.ForecastDays), in.Lat, in.Lng)
+	dailyParameter, hourlyParameter, _, err := base.GetValues(model, params, startTime, int(in.ForecastDays), in.Lat, in.Lng)
 	if err != nil {
 		return nil, err
 	}

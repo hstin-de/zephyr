@@ -1,10 +1,8 @@
 package dwd
 
 import (
-	"fmt"
 	"hstin/zephyr/common"
 	. "hstin/zephyr/helper"
-	"math"
 	"os"
 	"path"
 	"strings"
@@ -15,14 +13,9 @@ import (
 )
 
 const (
-	ModelName             = "icon"
 	TimeIntervalInMinutes = 60
 	MaxStep               = 79
 )
-
-var cache map[string]ndfile.NDFile = make(map[string]ndfile.NDFile)
-
-var indexCache map[int64][2]int = make(map[int64][2]int, 0)
 
 var ParameterLookup map[string]string = map[string]string{
 	"temperature":          "T_2M",
@@ -41,16 +34,20 @@ var ParameterLookup map[string]string = map[string]string{
 
 type IconModel struct {
 	RootPath      string
+	ModelName     string
 	NDFileManager *ndfile.NDFileManager
+	ParentModel   common.BaseModel
 }
 
 type IconModelOptions struct {
-	RootPath string
+	RootPath    string
+	ModelName   string
+	ParentModel common.BaseModel
 }
 
 func NewIconModel(opt IconModelOptions) *IconModel {
 
-	rootPath := path.Join(opt.RootPath, ModelName)
+	rootPath := path.Join(opt.RootPath, opt.ModelName)
 
 	if os.MkdirAll(rootPath, os.ModePerm) != nil {
 		Log.Fatal().Msg("Could not create root path for ICON model")
@@ -58,108 +55,23 @@ func NewIconModel(opt IconModelOptions) *IconModel {
 
 	return &IconModel{
 		RootPath:      rootPath,
+		ModelName:     opt.ModelName,
 		NDFileManager: ndfile.NewNDFileManager(rootPath, TimeIntervalInMinutes),
+		ParentModel:   opt.ParentModel,
 	}
 }
 
-func (m *IconModel) GetValues(parameter []common.ParameterOptions, startTime time.Time, forecastDays int, latitude, longitude float64) (map[string][]float64, map[string][]float64, error) {
-	daysSinceEpochStart := common.CalculateDaysSinceEpoch(startTime)
+func (m *IconModel) GetRootPath() string {
+	return m.RootPath
+}
 
-	var wg sync.WaitGroup
 
-	// Initialize hourlyData and dailyData maps with initial capacity
-	var hourlyData = make(map[string][]float64, len(parameter))
-	var dailyData = make(map[string][]float64, len(parameter)*2)
+func (m *IconModel) GetModelName() string {
+	return m.ModelName
+}
 
-	var hourlyLock sync.Mutex
-	var dailyLock sync.Mutex
-
-	// Start concurrent processing for each parameter
-	for _, p := range parameter {
-		wg.Add(1)
-		go func(p common.ParameterOptions) {
-			defer wg.Done()
-
-			var steps int
-
-			for day := 0; day <= forecastDays; day++ {
-				path := path.Join(m.RootPath, fmt.Sprintf("%d_%d.nd", p.ParameterID, daysSinceEpochStart+day))
-
-				var ndFile ndfile.NDFile
-				var err error
-				if cachedFile, ok := cache[path]; ok {
-					ndFile = cachedFile
-				} else {
-					ndFile, err = ndfile.PreFetch(path)
-					if err != nil {
-						continue
-					}
-					cache[path] = ndFile
-				}
-
-				if day == 0 {
-					steps = (24 * 60) / int(ndFile.TimeIntervalInMinutes)
-
-					hourlyLock.Lock()
-					hourlyData[p.DisplayName] = make([]float64, steps*(forecastDays+1))
-					dailyData[p.DisplayName+"_min"] = make([]float64, (forecastDays + 1))
-					dailyData[p.DisplayName+"_max"] = make([]float64, (forecastDays + 1))
-					hourlyLock.Unlock()
-				}
-
-				var latIndex int
-				var lngIndex int
-
-				cacheIndex := (int64(latitude/ndFile.Dx) << 32) | (int64(longitude/ndFile.Dy) & 0xFFFFFFFF)
-
-				if cachedIndex, ok := indexCache[cacheIndex]; ok {
-					latIndex = cachedIndex[0]
-					lngIndex = cachedIndex[1]
-				} else {
-					latIndex, lngIndex = ndFile.GetIndex(latitude, longitude)
-					indexCache[cacheIndex] = [2]int{latIndex, lngIndex}
-				}
-
-				values, err := ndFile.GetData(latIndex, lngIndex)
-				if err != nil {
-					return
-				}
-
-				minValue := math.MaxFloat64
-				maxValue := -math.MaxFloat64
-
-				startIndex := day * steps
-
-				for j, v := range values {
-					if v == 32767 {
-						continue
-					}
-
-					value := float64(v) / 100.0
-
-					hourlyLock.Lock()
-					hourlyData[p.DisplayName][startIndex+j] = value
-					hourlyLock.Unlock()
-
-					if value < minValue {
-						minValue = value
-					}
-					if value > maxValue {
-						maxValue = value
-					}
-				}
-
-				dailyLock.Lock()
-				dailyData[p.DisplayName+"_min"][day] = minValue
-				dailyData[p.DisplayName+"_max"][day] = maxValue
-				dailyLock.Unlock()
-			}
-		}(p)
-	}
-
-	wg.Wait()
-
-	return dailyData, hourlyData, nil
+func (m *IconModel) GetParentModel() common.BaseModel {
+	return m.ParentModel
 }
 
 func (m *IconModel) ProcessParameter(param string, downloadedGribFiles map[string]map[int][]byte, wg *sync.WaitGroup) {
@@ -224,7 +136,7 @@ func (m *IconModel) DowloadParameter(parameter []string, fast bool) error {
 	Log.Info().Msg("Downloading parameters: " + strings.Join(toDownload, ", "))
 
 	downloadedGribFiles := StartDWDDownloader(DWDOpenDataDownloaderOptions{
-		ModelName: "icon",
+		ModelName: m.ModelName,
 		Param:     strings.Join(downloadParams, ","),
 		MaxStep:   MaxStep,
 		Regrid:    true,

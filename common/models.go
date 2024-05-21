@@ -7,6 +7,13 @@ import (
 	"golang.org/x/sys/unix"
 )
 
+type BaseModel interface {
+	GetModelName() string
+	GetRootPath() string
+	GetParentModel() BaseModel
+	DowloadParameter(parameter []string, fast bool) error
+}
+
 func CalculateDaysSinceEpoch(t time.Time) int {
 	return int(t.UTC().Sub(epochTime).Hours() / 24)
 }
