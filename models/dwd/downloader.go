@@ -321,7 +321,7 @@ func StartDWDDownloader(options DWDOpenDataDownloaderOptions) map[string]map[int
 			mu.Lock()
 			gribFiles[p][step] = gribFile
 			mu.Unlock()
-			Log.Info().Msgf("Downloaded %s %d/%d", p, step, wdp.maxStep-1)
+			Log.Info().Msgf("[%s] Downloaded %s %d/%d", wdp.modelName, p, step, wdp.maxStep-1)
 		}
 
 		for step := wdp.modelDetails.breakPoint; step <= wdp.maxStep; step += 3 {
@@ -332,7 +332,7 @@ func StartDWDDownloader(options DWDOpenDataDownloaderOptions) map[string]map[int
 			mu.Lock()
 			gribFiles[p][step] = gribFile
 			mu.Unlock()
-			Log.Info().Msgf("Downloaded %s %d/%d", p, step, wdp.maxStep-1)
+			Log.Info().Msgf("[%s] Downloaded %s %d/%d", wdp.modelName, p, step, wdp.maxStep-1)
 		}
 	}
 

@@ -50,7 +50,7 @@ func NewIconModel(opt IconModelOptions) *IconModel {
 	rootPath := path.Join(opt.RootPath, opt.ModelName)
 
 	if os.MkdirAll(rootPath, os.ModePerm) != nil {
-		Log.Fatal().Msg("Could not create root path for ICON model")
+		Log.Fatal().Msgf("Could not create root path for model '%s'", opt.ModelName)
 	}
 
 	return &IconModel{
@@ -64,7 +64,6 @@ func NewIconModel(opt IconModelOptions) *IconModel {
 func (m *IconModel) GetRootPath() string {
 	return m.RootPath
 }
-
 
 func (m *IconModel) GetModelName() string {
 	return m.ModelName
@@ -86,7 +85,7 @@ func (m *IconModel) ProcessParameter(param string, downloadedGribFiles map[strin
 	if parsedParameter.StepType == common.ACCUMULATED {
 
 		var previousData []float64 = ndfile.ProcessGRIB(downloadedGribFiles[ParameterLookup[param]][0]).DataValues
-		for step := 0; step < MaxStep; step++ {
+		for step := 1; step < MaxStep; step++ {
 			gribFile := ndfile.ProcessGRIB(downloadedGribFiles[ParameterLookup[param]][step])
 
 			origData := gribFile.DataValues
@@ -143,7 +142,7 @@ func (m *IconModel) DowloadParameter(parameter []string, fast bool) error {
 		Fast:      fast,
 	})
 
-	Log.Info().Msg("Download complete. Processing parameters")
+	Log.Info().Msgf("[%s] Download complete. Processing parameters", m.ModelName)
 
 	var wg sync.WaitGroup
 

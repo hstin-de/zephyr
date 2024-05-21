@@ -2,7 +2,7 @@ package main
 
 import (
 	. "hstin/zephyr/helper"
-	"hstin/zephyr/models/dwd"
+	"hstin/zephyr/models/base"
 	"hstin/zephyr/server"
 	"os"
 	"sync"
@@ -54,6 +54,12 @@ func main() {
 				EnvVars: []string{"GRPC_PORT"},
 			},
 			&cli.StringSliceFlag{
+				Name:    "models",
+				Value:   cli.NewStringSlice("icon"),
+				Usage:   "Models to download",
+				EnvVars: []string{"MODELS"},
+			},
+			&cli.StringSliceFlag{
 				Name:    "params",
 				Aliases: []string{"p"},
 				Value:   cli.NewStringSlice("temperature", "clouds", "condition", "cape", "wind_u", "wind_v", "relative_humidity", "surface_pressure", "dewpoint", "snow_depth", "surface_pressure_msl", "precipitation"),
@@ -76,11 +82,15 @@ func main() {
 			}
 
 			if cCtx.Bool("download") {
-				model := dwd.NewIconModel(dwd.IconModelOptions{
-					RootPath: "data",
-				})
 
-				model.DowloadParameter(cCtx.StringSlice("params"), cCtx.Bool("fast"))
+				for _, model := range cCtx.StringSlice("models") {
+					wg.Add(1)
+					go func(model string) {
+						defer wg.Done()
+
+						base.AvailableModels[model].Model.DowloadParameter(cCtx.StringSlice("params"), cCtx.Bool("fast"))
+					}(model)
+				}
 
 			}
 

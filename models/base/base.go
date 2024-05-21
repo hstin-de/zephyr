@@ -50,7 +50,7 @@ type ModelOptions struct {
 	Model  common.BaseModel
 }
 
-var modelMap = map[string]ModelOptions{
+var AvailableModels = map[string]ModelOptions{
 	"icon":    {Model: iconModel, Border: Border{LatMax: 90, LatMin: -90, LngMax: 180, LngMin: -180}},
 	"icon-eu": {Model: iconEUModel, Border: Border{LatMax: 70.5, LatMin: 29.5, LngMax: 62.5, LngMin: -23.5}},
 	"icon-d2": {Model: iconD2Model, Border: Border{LatMax: 70.5, LatMin: 29.5, LngMax: 62.5, LngMin: -23.5}},
@@ -60,7 +60,7 @@ func GetBestModel(latitude, longitude float64, preferredModel string) (common.Ba
 
 	// Check if a preferred model is given and available within the model map and given coordinates
 	if preferredModel != "" && preferredModel != "auto" {
-		if matchedModelOptions, ok := modelMap[preferredModel]; ok {
+		if matchedModelOptions, ok := AvailableModels[preferredModel]; ok {
 			choosenModel := matchedModelOptions.Model
 			choosenModelBorder := matchedModelOptions.Border
 
@@ -75,7 +75,7 @@ func GetBestModel(latitude, longitude float64, preferredModel string) (common.Ba
 				}
 
 				preferredModel = parentModel.GetModelName()
-				if parentModelOptions, exists := modelMap[preferredModel]; exists {
+				if parentModelOptions, exists := AvailableModels[preferredModel]; exists {
 					choosenModel = parentModel
 					choosenModelBorder = parentModelOptions.Border
 				} else {
@@ -120,7 +120,7 @@ func GetNDFile(model common.BaseModel, parameterID, daysSinceEpoch int) (ndfile.
 	return ndFile, model, nil
 }
 
-func GetValues(model common.BaseModel, parameter []common.ParameterOptions, startTime time.Time, forecastDays int, latitude, longitude float64) (map[string][]float64, map[string][]float64, []string, error) {
+func GetValues(model common.BaseModel, parameter []common.ParameterOptions, startTime time.Time, forecastDays int, latitude, longitude float64) (map[string][]float64, map[string][]float64, map[string][]string, error) {
 	daysSinceEpochStart := common.CalculateDaysSinceEpoch(startTime)
 
 	var wg sync.WaitGroup
@@ -129,7 +129,7 @@ func GetValues(model common.BaseModel, parameter []common.ParameterOptions, star
 	var hourlyData = make(map[string][]float64, len(parameter))
 	var dailyData = make(map[string][]float64, len(parameter)*2)
 
-	var usedModels = make(map[string]bool, 0)
+	var usedModels = make(map[string]map[string]bool, 0)
 
 	modelName := model.GetModelName()
 
@@ -155,7 +155,11 @@ func GetValues(model common.BaseModel, parameter []common.ParameterOptions, star
 					continue
 				}
 
-				usedModels[model.GetModelName()] = true
+				if _, ok := usedModels[p.DisplayName]; !ok {
+					usedModels[p.DisplayName] = make(map[string]bool, 0)
+				}
+
+				usedModels[p.DisplayName][model.GetModelName()] = true
 
 				if day == 0 {
 					steps = (24 * 60) / int(ndFile.TimeIntervalInMinutes)
@@ -219,11 +223,14 @@ func GetValues(model common.BaseModel, parameter []common.ParameterOptions, star
 
 	wg.Wait()
 
-	var usedModelsArray []string = make([]string, 0, len(usedModels))
+	// "param" : ["model1", model2...]
+	var usedModelsMap = make(map[string][]string, 0)
 
-	for model := range usedModels {
-		usedModelsArray = append(usedModelsArray, model)
+	for param, models := range usedModels {
+		for model := range models {
+			usedModelsMap[param] = append(usedModelsMap[param], model)
+		}
 	}
 
-	return dailyData, hourlyData, usedModelsArray, nil
+	return dailyData, hourlyData, usedModelsMap, nil
 }

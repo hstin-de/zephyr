@@ -17,7 +17,7 @@ type ForecastResponse struct {
 	UTCOffset       int                  `json:"utc_offset"`
 	Timezone        string               `json:"timezone"`
 	StartTime       int64                `json:"start_time"`
-	UsedModels      []string             `json:"used_models"`
+	UsedModels      map[string][]string  `json:"used_models"`
 	Daily           map[string][]float64 `json:"daily"`
 	Hourly          map[string][]float64 `json:"hourly"`
 	Minitely15      map[string][]float64 `json:"minutely15"`
