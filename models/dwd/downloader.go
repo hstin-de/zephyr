@@ -90,6 +90,7 @@ type DWDOpenDataDownloader struct {
 	regrid          bool
 	modelDetails    DWDModel
 	httpClient      *http.Client
+	Fast            bool
 }
 
 type DWDOpenDataDownloaderOptions struct {
@@ -99,6 +100,7 @@ type DWDOpenDataDownloaderOptions struct {
 	MaxStep      int
 	Regrid       bool
 	ModelDetails DWDModel
+	Fast         bool
 }
 
 func formatString(format string, args ...interface{}) string {
@@ -163,6 +165,7 @@ func NewDWDOpenDataDownloader(options DWDOpenDataDownloaderOptions) *DWDOpenData
 		regrid:          options.Regrid,
 		modelDetails:    options.ModelDetails,
 		httpClient:      &http.Client{Timeout: 5 * time.Minute},
+		Fast:            options.Fast,
 	}
 }
 
@@ -258,6 +261,16 @@ func (wdp *DWDOpenDataDownloader) downloadAndProcessFile(url string, retries int
 	return gribFile, nil
 }
 
+func (wdp *DWDOpenDataDownloader) DownloadStep(param string, step int, timestamp time.Time) ([]byte, error) {
+	url := wdp.getGribFileUrl(param, timestamp, step)
+	gribFile, err := wdp.downloadAndProcessFile(url, 5)
+	if err != nil {
+		return nil, err
+	}
+
+	return gribFile, nil
+}
+
 func StartDWDDownloader(options DWDOpenDataDownloaderOptions) map[string]map[int][]byte {
 	modelDetails, exists := dwdModels[options.ModelName]
 	if !exists {
@@ -279,16 +292,21 @@ func StartDWDDownloader(options DWDOpenDataDownloaderOptions) map[string]map[int
 	}
 
 	params := strings.Split(wdp.param, ",")
-	var wg sync.WaitGroup
-	errors := make(chan error, wdp.maxStep*len(params))
 
-	var mutex sync.Mutex
 	gribFiles := make(map[string]map[int][]byte)
+	var mu sync.Mutex
+	var wg sync.WaitGroup
 
-	for _, p := range params {
+	downloadStep := func(p string, step int) ([]byte, error) {
+		gribFile, err := wdp.DownloadStep(p, step, timestamp)
+		if err != nil {
+			return nil, err
+		}
+		return gribFile, nil
+	}
 
-		gribFiles[p] = make(map[int][]byte)
-
+	processParam := func(p string) {
+		defer wg.Done()
 		firstLoop := wdp.maxStep
 
 		if wdp.maxStep >= wdp.modelDetails.breakPoint {
@@ -296,49 +314,47 @@ func StartDWDDownloader(options DWDOpenDataDownloaderOptions) map[string]map[int
 		}
 
 		for step := 0; step < firstLoop; step++ {
-			wg.Add(1)
-			go func(param string, step int) {
-				defer wg.Done()
-				url := wdp.getGribFileUrl(param, timestamp, step)
-				gribFile, err := wdp.downloadAndProcessFile(url, 5)
-				if err != nil {
-					errors <- err
-					return
-				}
-
-				mutex.Lock()
-				gribFiles[param][step] = gribFile
-				mutex.Unlock()
-
-			}(p, step)
+			gribFile, err := downloadStep(p, step)
+			if err != nil {
+				return
+			}
+			mu.Lock()
+			gribFiles[p][step] = gribFile
+			mu.Unlock()
+			Log.Info().Msgf("Downloaded %s %d/%d", p, step, wdp.maxStep-1)
 		}
 
 		for step := wdp.modelDetails.breakPoint; step <= wdp.maxStep; step += 3 {
-			wg.Add(1)
-			go func(param string, step int) {
-				defer wg.Done()
-				url := wdp.getGribFileUrl(param, timestamp, step)
-				gribFile, err := wdp.downloadAndProcessFile(url, 5)
-				if err != nil {
-					errors <- err
-					return
-				}
+			gribFile, err := downloadStep(p, step)
+			if err != nil {
+				return
+			}
+			mu.Lock()
+			gribFiles[p][step] = gribFile
+			mu.Unlock()
+			Log.Info().Msgf("Downloaded %s %d/%d", p, step, wdp.maxStep-1)
+		}
+	}
 
-				mutex.Lock()
-				gribFiles[param][step] = gribFile
-				mutex.Unlock()
-			}(p, step)
+	Log.Info().Msgf("Downloading %s with Fast Mode: %t", wdp.modelName, wdp.Fast)
+
+	for _, p := range params {
+		mu.Lock()
+		gribFiles[p] = make(map[int][]byte)
+		mu.Unlock()
+
+		if wdp.Fast {
+			wg.Add(1)
+			go processParam(p)
+		} else {
+			wg.Add(1)
+			processParam(p)
 		}
 	}
 
 	wg.Wait()
-	close(errors)
 
-	for err := range errors {
-		if err != nil {
-			Log.Error().Err(err).Msg("Error downloading file")
-		}
-	}
+	wg.Wait()
 
 	return gribFiles
 }

@@ -201,7 +201,7 @@ func (m *IconModel) ProcessParameter(param string, downloadedGribFiles map[strin
 	}
 }
 
-func (m *IconModel) DowloadParameter(parameter []string) error {
+func (m *IconModel) DowloadParameter(parameter []string, fast bool) error {
 
 	GenerateWeights(WeightOptions{
 		GridsPath:   "/tmp/gribdl/dwd/grids",
@@ -228,25 +228,16 @@ func (m *IconModel) DowloadParameter(parameter []string) error {
 		Param:     strings.Join(downloadParams, ","),
 		MaxStep:   MaxStep,
 		Regrid:    true,
+		Fast:      fast,
 	})
 
 	Log.Info().Msg("Download comlete. Processing parameters")
-
-	ParallelMode := true
-
-	// Each parameter needs 2.5GB of memory
-	// Disable parallel processing if not enough memory is available
-	if common.GetFreeMemory() < uint64(len(parameter))*uint64(2e9) {
-		ParallelMode = false
-		Log.Warn().Msg("Not enough memory for parallel processing, using compatibility mode! Download will take significantly longer!")
-		Log.Warn().Msg("Ensure you have at least 2GB of free memory available per parameter!")
-	}
 
 	var wg sync.WaitGroup
 
 	for _, p := range parameter {
 		wg.Add(1)
-		if ParallelMode {
+		if fast {
 			go m.ProcessParameter(p, downloadedGribFiles, &wg)
 		} else {
 			m.ProcessParameter(p, downloadedGribFiles, &wg)

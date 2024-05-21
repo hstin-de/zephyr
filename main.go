@@ -13,7 +13,7 @@ import (
 func main() {
 
 	app := &cli.App{
-		Name:  "zephyr - A High-Performance Weather API Server",
+		Name:      "zephyr - A High-Performance Weather API Server",
 		UsageText: "zephyr [global options]",
 		Flags: []cli.Flag{
 			&cli.BoolFlag{
@@ -34,6 +34,12 @@ func main() {
 				Value:   false,
 				Usage:   "Download newest weather data",
 				EnvVars: []string{"START_DOWNLOAD"},
+			},
+			&cli.BoolFlag{
+				Name:    "fast",
+				Value:   false,
+				Usage:   "Download using multiple threads, uses significantly more memory",
+				EnvVars: []string{"FAST_DOWNLOAD"},
 			},
 			&cli.StringFlag{
 				Name:    "http-port",
@@ -74,7 +80,7 @@ func main() {
 					RootPath: "data",
 				})
 
-				model.DowloadParameter(cCtx.StringSlice("params"))
+				model.DowloadParameter(cCtx.StringSlice("params"), cCtx.Bool("fast"))
 
 			}
 
