@@ -231,7 +231,7 @@ func (m *IconModel) DowloadParameter(parameter []string, fast bool) error {
 		Fast:      fast,
 	})
 
-	Log.Info().Msg("Download comlete. Processing parameters")
+	Log.Info().Msg("Download complete. Processing parameters")
 
 	var wg sync.WaitGroup
 
