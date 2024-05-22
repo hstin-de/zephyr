@@ -15,17 +15,21 @@ message ForecastResponse {
     double longitude = 3;
     int32 utc_offset = 4;
     string timezone = 5;
-    int64 start_time = 6; // Using int64 as per the updated request
-    map<string, google.protobuf.ListValue> daily = 7;
-    map<string, google.protobuf.ListValue> hourly = 8;
+    int64 start_time = 6;
+    map<string, google.protobuf.ListValue> used_models = 7;
+    map<string, google.protobuf.ListValue> daily = 8;
+    map<string, google.protobuf.ListValue> hourly = 9;
+    map<string, google.protobuf.ListValue> minutely15 = 10;
 }
 
 // ForecastRequest is used to pass parameters to the forecast service.
 message ForecastRequest {
-    double lat = 1; // Latitude
-    double lng = 2; // Longitude
-    int32 forecast_days = 3; // Number of days to forecast
-    repeated string parameters = 4; // Additional parameters for the forecast
+    double lat = 1;
+    double lng = 2;
+    int32 forecast_days = 3;
+    bool minutely15 = 4;
+    string model = 5;
+    repeated string parameters = 6;
 }
 
 // Service definition for Forecast

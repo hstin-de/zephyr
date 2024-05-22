@@ -3,6 +3,7 @@ package server
 import (
 	. "hstin/zephyr/helper"
 	"hstin/zephyr/models/base"
+	"strings"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -53,7 +54,12 @@ func StartServer(port string) {
 			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "No parameters specified"})
 		}
 
-		matchedParams, err := GetParameterOptions(params)
+		paramList := strings.FieldsFunc(params, func(c rune) bool { return c == ',' })
+		if len(paramList) == 0 {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "No parameters specified"})
+		}
+
+		matchedParams, err := GetParameterOptions(paramList)
 		if err != nil {
 			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
 		}

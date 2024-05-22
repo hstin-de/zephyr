@@ -8,16 +8,11 @@ import (
 	"sync"
 )
 
-func GetParameterOptions(params string) ([]common.ParameterOptions, error) {
-	paramList := strings.FieldsFunc(params, func(c rune) bool { return c == ',' })
-	if len(paramList) == 0 {
-		return nil, errors.New("no valid parameters specified")
-	}
+func GetParameterOptions(params []string) ([]common.ParameterOptions, error) {
+	seenParams := make(map[string]struct{}, len(params))
+	matchedParams := make([]common.ParameterOptions, 0, len(params))
 
-	seenParams := make(map[string]struct{}, len(paramList))
-	matchedParams := make([]common.ParameterOptions, 0, len(paramList))
-
-	for _, param := range paramList {
+	for _, param := range params {
 		trimmedParam := strings.TrimSpace(param)
 		if _, alreadySeen := seenParams[trimmedParam]; !alreadySeen && trimmedParam != "" {
 			if paramOption, ok := common.Parameters[trimmedParam]; ok {

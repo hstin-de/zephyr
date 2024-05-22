@@ -13,6 +13,7 @@ import (
 
 	"github.com/zsefvlol/timezonemapper"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/reflection"
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
@@ -39,9 +40,19 @@ func (s *server) GetForecast(ctx context.Context, in *protobuf.ForecastRequest) 
 		}
 	}
 
-	model, _ := base.GetBestModel(in.Lat, in.Lng, "")
+	model, _ := base.GetBestModel(in.Lat, in.Lng, in.Model)
 
 	timezone := timezonemapper.LatLngToTimezoneString(in.Lat, in.Lng)
+
+	matchedParams, err := GetParameterOptions(in.Parameters)
+	if err != nil {
+		return nil, err
+	}
+
+	forecastDays := int(in.ForecastDays)
+	if forecastDays > 365 {
+		return nil, errors.New("Invalid number of days")
+	}
 
 	loc, err := time.LoadLocation(timezone)
 	if err != nil {
@@ -52,14 +63,15 @@ func (s *server) GetForecast(ctx context.Context, in *protobuf.ForecastRequest) 
 
 	_, offset := startTime.Zone()
 
-	dailyParameter, hourlyParameter, _, err := base.GetValues(model, params, startTime, int(in.ForecastDays), in.Lat, in.Lng)
+	dailyParameter, hourlyParameter, usedModels, err := base.GetValues(model, matchedParams, startTime, forecastDays, in.Lat, in.Lng)
 	if err != nil {
-		return nil, err
+		return nil, errors.New("Error getting data")
 	}
 
 	var daily map[string]*structpb.ListValue = make(map[string]*structpb.ListValue, len(dailyParameter))
 	var hourly map[string]*structpb.ListValue = make(map[string]*structpb.ListValue, len(hourlyParameter))
-	// var minutely15 map[string]*structpb.ListValue = make(map[string]*structpb.ListValue, 0)
+	var minutely15 map[string]*structpb.ListValue = make(map[string]*structpb.ListValue, len(hourlyParameter))
+	var usedModelsMap map[string]*structpb.ListValue = make(map[string]*structpb.ListValue, len(usedModels))
 
 	for key, value := range dailyParameter {
 		daily[key] = &structpb.ListValue{
@@ -89,15 +101,48 @@ func (s *server) GetForecast(ctx context.Context, in *protobuf.ForecastRequest) 
 		}
 	}
 
+	if in.Minutely15 {
+		minutely15Tmp := calculate15Minutely(hourlyParameter)
+		for key, value := range minutely15Tmp {
+			minutely15[key] = &structpb.ListValue{
+				Values: make([]*structpb.Value, len(value)),
+			}
+
+			for i, val := range value {
+				minutely15[key].Values[i] = &structpb.Value{
+					Kind: &structpb.Value_NumberValue{
+						NumberValue: val,
+					},
+				}
+			}
+		}
+	}
+
+	for key, value := range usedModels {
+		usedModelsMap[key] = &structpb.ListValue{
+			Values: make([]*structpb.Value, len(value)),
+		}
+
+		for i, val := range value {
+			usedModelsMap[key].Values[i] = &structpb.Value{
+				Kind: &structpb.Value_StringValue{
+					StringValue: val,
+				},
+			}
+		}
+	}
+
 	return &protobuf.ForecastResponse{
-		CalculationTime: time.Since(startCalculation).Microseconds(),
+		CalculationTime: int64(time.Since(startCalculation).Microseconds()),
 		Latitude:        in.Lat,
 		Longitude:       in.Lng,
 		UtcOffset:       int32(offset * 1000),
 		Timezone:        timezone,
 		StartTime:       startTime.Truncate(24*time.Hour).Unix() * 1000,
+		UsedModels:      usedModelsMap,
 		Daily:           daily,
 		Hourly:          hourly,
+		Minutely15:      minutely15,
 	}, nil
 
 }
@@ -110,7 +155,8 @@ func StartGRPCServer(port string) {
 
 	s := grpc.NewServer()
 	protobuf.RegisterForecastServiceServer(s, &server{})
-	Log.Printf("gRPC server listening at :%s", port)
+	reflection.Register(s)
+	Log.Info().Msgf("gRPC server listening at :%s", port)
 	if err := s.Serve(lis); err != nil {
 		Log.Fatal().Err(err).Msg("failed to start gRPC server")
 	}
