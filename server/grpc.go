@@ -14,6 +14,7 @@ import (
 	"github.com/zsefvlol/timezonemapper"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
+	"google.golang.org/protobuf/types/known/structpb"
 )
 
 type server struct {
@@ -67,20 +68,19 @@ func (s *server) GetForecast(ctx context.Context, in *protobuf.ForecastRequest) 
 		return nil, errors.New("Error getting data")
 	}
 
-	startTImeAufbereitung := time.Now()
-	var daily map[string]*protobuf.ListValue = make(map[string]*protobuf.ListValue, len(dailyParameter))
-	var hourly map[string]*protobuf.ListValue = make(map[string]*protobuf.ListValue, len(hourlyParameter))
-	var minutely15 map[string]*protobuf.ListValue = make(map[string]*protobuf.ListValue, len(hourlyParameter))
-	var usedModelsMap map[string]*protobuf.ListValue = make(map[string]*protobuf.ListValue, len(usedModels))
+	var daily map[string]*structpb.ListValue = make(map[string]*structpb.ListValue, len(dailyParameter))
+	var hourly map[string]*structpb.ListValue = make(map[string]*structpb.ListValue, len(hourlyParameter))
+	var minutely15 map[string]*structpb.ListValue = make(map[string]*structpb.ListValue, len(hourlyParameter))
+	var usedModelsMap map[string]*structpb.ListValue = make(map[string]*structpb.ListValue, len(usedModels))
 
 	for key, value := range dailyParameter {
-		daily[key] = &protobuf.ListValue{
-			Values: make([]*protobuf.Value, len(value)),
+		daily[key] = &structpb.ListValue{
+			Values: make([]*structpb.Value, len(value)),
 		}
 
 		for i, val := range value {
-			daily[key].Values[i] = &protobuf.Value{
-				Kind: &protobuf.Value_NumberValue{
+			daily[key].Values[i] = &structpb.Value{
+				Kind: &structpb.Value_NumberValue{
 					NumberValue: val,
 				},
 			}
@@ -88,13 +88,13 @@ func (s *server) GetForecast(ctx context.Context, in *protobuf.ForecastRequest) 
 	}
 
 	for key, value := range hourlyParameter {
-		hourly[key] = &protobuf.ListValue{
-			Values: make([]*protobuf.Value, len(value)),
+		hourly[key] = &structpb.ListValue{
+			Values: make([]*structpb.Value, len(value)),
 		}
 
 		for i, val := range value {
-			hourly[key].Values[i] = &protobuf.Value{
-				Kind: &protobuf.Value_NumberValue{
+			hourly[key].Values[i] = &structpb.Value{
+				Kind: &structpb.Value_NumberValue{
 					NumberValue: val,
 				},
 			}
@@ -104,13 +104,13 @@ func (s *server) GetForecast(ctx context.Context, in *protobuf.ForecastRequest) 
 	if in.Minutely15 {
 		minutely15Tmp := calculate15Minutely(hourlyParameter)
 		for key, value := range minutely15Tmp {
-			minutely15[key] = &protobuf.ListValue{
-				Values: make([]*protobuf.Value, len(value)),
+			minutely15[key] = &structpb.ListValue{
+				Values: make([]*structpb.Value, len(value)),
 			}
 
 			for i, val := range value {
-				minutely15[key].Values[i] = &protobuf.Value{
-					Kind: &protobuf.Value_NumberValue{
+				minutely15[key].Values[i] = &structpb.Value{
+					Kind: &structpb.Value_NumberValue{
 						NumberValue: val,
 					},
 				}
@@ -119,20 +119,18 @@ func (s *server) GetForecast(ctx context.Context, in *protobuf.ForecastRequest) 
 	}
 
 	for key, value := range usedModels {
-		usedModelsMap[key] = &protobuf.ListValue{
-			Values: make([]*protobuf.Value, len(value)),
+		usedModelsMap[key] = &structpb.ListValue{
+			Values: make([]*structpb.Value, len(value)),
 		}
 
 		for i, val := range value {
-			usedModelsMap[key].Values[i] = &protobuf.Value{
-				Kind: &protobuf.Value_StringValue{
+			usedModelsMap[key].Values[i] = &structpb.Value{
+				Kind: &structpb.Value_StringValue{
 					StringValue: val,
 				},
 			}
 		}
 	}
-
-	Log.Info().Msgf("Aufbereitung: %v", time.Since(startTImeAufbereitung))
 
 	return &protobuf.ForecastResponse{
 		CalculationTime: int64(time.Since(startCalculation).Microseconds()),

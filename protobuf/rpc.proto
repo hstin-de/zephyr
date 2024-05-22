@@ -5,38 +5,7 @@ package forecast;
 option go_package = "hstin/zephyr;protobuf";
 
 
-message Value {
-  // The kind of value.
-  oneof kind {
-    // Represents a null value.
-    NullValue null_value = 1;
-    // Represents a double value.
-    double number_value = 2;
-    // Represents a string value.
-    string string_value = 3;
-    // Represents a boolean value.
-    bool bool_value = 4;
-    // Represents a structured value.
-    Struct struct_value = 5;
-    // Represents a repeated `Value`.
-    ListValue list_value = 6;
-  }
-}
-
-enum NullValue {
-  // Null value.
-  NULL_VALUE = 0;
-}
-
-message ListValue {
-  // Repeated field of dynamically typed values.
-  repeated Value values = 1;
-}
-
-message Struct {
-  // Unordered map of dynamically typed values.
-  map<string, Value> fields = 1;
-}
+import "google/protobuf/struct.proto";
 
 
 // ForecastResponse is the structure for weather forecast data.
@@ -47,10 +16,10 @@ message ForecastResponse {
     int32 utc_offset = 4;
     string timezone = 5;
     int64 start_time = 6;
-    map<string, ListValue> used_models = 7;
-    map<string, ListValue> daily = 8;
-    map<string, ListValue> hourly = 9;
-    map<string, ListValue> minutely15 = 10;
+    map<string, google.protobuf.ListValue> used_models = 7;
+    map<string, google.protobuf.ListValue> daily = 8;
+    map<string, google.protobuf.ListValue> hourly = 9;
+    map<string, google.protobuf.ListValue> minutely15 = 10;
 }
 
 // ForecastRequest is used to pass parameters to the forecast service.
