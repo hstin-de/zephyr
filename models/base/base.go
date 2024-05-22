@@ -139,6 +139,7 @@ func GetValues(model common.BaseModel, parameter []common.ParameterOptions, star
 
 	var hourlyLock sync.Mutex
 	var dailyLock sync.Mutex
+	var usedModelsLock sync.Mutex
 
 	// Start concurrent processing for each parameter
 	for _, p := range parameter {
@@ -155,11 +156,13 @@ func GetValues(model common.BaseModel, parameter []common.ParameterOptions, star
 					continue
 				}
 
+				usedModelsLock.Lock()
 				if _, ok := usedModels[p.DisplayName]; !ok {
 					usedModels[p.DisplayName] = make(map[string]bool, 0)
 				}
 
 				usedModels[p.DisplayName][model.GetModelName()] = true
+				usedModelsLock.Unlock()
 
 				if day == 0 {
 					steps = (24 * 60) / int(ndFile.TimeIntervalInMinutes)
