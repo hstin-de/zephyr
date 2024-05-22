@@ -7,6 +7,7 @@ import (
 	"hstin/zephyr/models/base"
 	"hstin/zephyr/protobuf"
 	"net"
+	"os"
 	"time"
 
 	. "hstin/zephyr/helper"
@@ -16,6 +17,8 @@ import (
 	"google.golang.org/grpc/reflection"
 	"google.golang.org/protobuf/types/known/structpb"
 )
+
+const grpcEnvVar = "ZEPHYR_GRPC_SERVER_RUNNING"
 
 type server struct {
 	protobuf.UnimplementedForecastServiceServer
@@ -148,6 +151,13 @@ func (s *server) GetForecast(ctx context.Context, in *protobuf.ForecastRequest) 
 }
 
 func StartGRPCServer(port string) {
+
+	// Only start the gRPC server once
+	if os.Getenv(grpcEnvVar) != "" {
+		return
+	}
+	os.Setenv(grpcEnvVar, "true")
+
 	lis, err := net.Listen("tcp", ":"+port)
 	if err != nil {
 		Log.Fatal().Err(err).Msg("failed to start listener")
