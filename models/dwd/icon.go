@@ -14,7 +14,7 @@ import (
 
 const (
 	TimeIntervalInMinutes = 60
-	MaxStep               = 10
+	MaxStep               = 79
 )
 
 type IconModel struct {
