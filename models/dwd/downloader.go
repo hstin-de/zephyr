@@ -80,9 +80,24 @@ var dwdModels = map[string]DWDModel{
 	},
 }
 
+var ICONParameterLookup map[string]string = map[string]string{
+	"temperature":          "T_2M",
+	"clouds":               "CLCT",
+	"condition":            "WW",
+	"cape":                 "CAPE_CON",
+	"wind_u":               "U_10M",
+	"wind_v":               "V_10M",
+	"relative_humidity":    "RELHUM_2M",
+	"surface_pressure":     "PMSL",
+	"dewpoint":             "TD_2M",
+	"snow_depth":           "H_SNOW",
+	"surface_pressure_msl": "PS",
+	"precipitation":        "TOT_PREC",
+}
+
 type DWDOpenDataDownloader struct {
 	modelName       string
-	param           string
+	params          []string
 	tmpFolder       string
 	descriptionFile string
 	weightsFile     string
@@ -95,7 +110,7 @@ type DWDOpenDataDownloader struct {
 
 type DWDOpenDataDownloaderOptions struct {
 	ModelName    string
-	Param        string
+	Params       []string
 	OutputFolder string
 	MaxStep      int
 	Regrid       bool
@@ -157,7 +172,7 @@ func NewDWDOpenDataDownloader(options DWDOpenDataDownloaderOptions) *DWDOpenData
 
 	return &DWDOpenDataDownloader{
 		modelName:       options.ModelName,
-		param:           options.Param,
+		params:          options.Params,
 		tmpFolder:       tmpFolder,
 		descriptionFile: weightsDir + "/" + dwdModels[options.ModelName].model + "_description.txt",
 		weightsFile:     weightsDir + "/" + dwdModels[options.ModelName].model + "_weights.nc",
@@ -291,8 +306,6 @@ func StartDWDDownloader(options DWDOpenDataDownloaderOptions) map[string]map[int
 		wdp.maxStep = options.ModelDetails.maxStep[timestamp.Hour()]
 	}
 
-	params := strings.Split(wdp.param, ",")
-
 	gribFiles := make(map[string]map[int][]byte)
 	var mu sync.Mutex
 	var wg sync.WaitGroup
@@ -314,7 +327,7 @@ func StartDWDDownloader(options DWDOpenDataDownloaderOptions) map[string]map[int
 		}
 
 		for step := 0; step < firstLoop; step++ {
-			gribFile, err := downloadStep(p, step)
+			gribFile, err := downloadStep(ICONParameterLookup[p], step)
 			if err != nil {
 				return
 			}
@@ -325,7 +338,7 @@ func StartDWDDownloader(options DWDOpenDataDownloaderOptions) map[string]map[int
 		}
 
 		for step := wdp.modelDetails.breakPoint; step <= wdp.maxStep; step += 3 {
-			gribFile, err := downloadStep(p, step)
+			gribFile, err := downloadStep(ICONParameterLookup[p], step)
 			if err != nil {
 				return
 			}
@@ -338,7 +351,13 @@ func StartDWDDownloader(options DWDOpenDataDownloaderOptions) map[string]map[int
 
 	Log.Info().Msgf("Downloading %s with Fast Mode: %t", wdp.modelName, wdp.Fast)
 
-	for _, p := range params {
+	for _, p := range options.Params {
+
+		if _, ok := ICONParameterLookup[p]; !ok {
+			Log.Warn().Msgf("Parameter %s not found. skipping...", p)
+			continue
+		}
+
 		mu.Lock()
 		gribFiles[p] = make(map[int][]byte)
 		mu.Unlock()
@@ -351,8 +370,6 @@ func StartDWDDownloader(options DWDOpenDataDownloaderOptions) map[string]map[int
 			processParam(p)
 		}
 	}
-
-	wg.Wait()
 
 	wg.Wait()
 

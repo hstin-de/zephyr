@@ -14,23 +14,8 @@ import (
 
 const (
 	TimeIntervalInMinutes = 60
-	MaxStep               = 79
+	MaxStep               = 10
 )
-
-var ParameterLookup map[string]string = map[string]string{
-	"temperature":          "T_2M",
-	"clouds":               "CLCT",
-	"condition":            "WW",
-	"cape":                 "CAPE_CON",
-	"wind_u":               "U_10M",
-	"wind_v":               "V_10M",
-	"relative_humidity":    "RELHUM_2M",
-	"surface_pressure":     "PMSL",
-	"dewpoint":             "TD_2M",
-	"snow_depth":           "H_SNOW",
-	"surface_pressure_msl": "PS",
-	"precipitation":        "TOT_PREC",
-}
 
 type IconModel struct {
 	RootPath      string
@@ -82,11 +67,13 @@ func (m *IconModel) ProcessParameter(param string, downloadedGribFiles map[strin
 		return
 	}
 
+	Log.Info().Msgf("[%s] Processing parameter: %s", m.ModelName, param)
+
 	if parsedParameter.StepType == common.ACCUMULATED {
 
-		var previousData []float64 = ndfile.ProcessGRIB(downloadedGribFiles[ParameterLookup[param]][0]).DataValues
+		var previousData []float64 = ndfile.ProcessGRIB(downloadedGribFiles[param][0]).DataValues
 		for step := 1; step < MaxStep; step++ {
-			gribFile := ndfile.ProcessGRIB(downloadedGribFiles[ParameterLookup[param]][step])
+			gribFile := ndfile.ProcessGRIB(downloadedGribFiles[param][step])
 
 			origData := gribFile.DataValues
 
@@ -106,7 +93,7 @@ func (m *IconModel) ProcessParameter(param string, downloadedGribFiles map[strin
 
 		previousData = nil
 	} else {
-		for _, gribFile := range downloadedGribFiles[ParameterLookup[param]] {
+		for _, gribFile := range downloadedGribFiles[param] {
 			m.NDFileManager.AddGrib(ndfile.ProcessGRIB(gribFile))
 		}
 	}
@@ -122,35 +109,46 @@ func (m *IconModel) DowloadParameter(parameter []string, fast bool) error {
 
 	var downloadParams []string = make([]string, len(parameter))
 
-	var toDownload []string = make([]string, 0)
-
 	//convert parameter to DWD parameter
 	for i, p := range parameter {
-		if val, ok := ParameterLookup[p]; ok {
-			downloadParams[i] = val
-			toDownload = append(toDownload, p)
+		if val, ok := common.Parameters[p]; ok {
+			downloadParams[i] = val.DisplayName
 		}
 	}
 
-	Log.Info().Msg("Downloading parameters: " + strings.Join(toDownload, ", "))
-
-	downloadedGribFiles := StartDWDDownloader(DWDOpenDataDownloaderOptions{
-		ModelName: m.ModelName,
-		Param:     strings.Join(downloadParams, ","),
-		MaxStep:   MaxStep,
-		Regrid:    true,
-		Fast:      fast,
-	})
-
-	Log.Info().Msgf("[%s] Download complete. Processing parameters", m.ModelName)
+	Log.Info().Msg("Downloading parameters: " + strings.Join(downloadParams, ", "))
 
 	var wg sync.WaitGroup
 
-	for _, p := range parameter {
-		wg.Add(1)
-		if fast {
+	if fast {
+
+		downloadedGribFiles := StartDWDDownloader(DWDOpenDataDownloaderOptions{
+			ModelName: m.ModelName,
+			Params:    downloadParams,
+			MaxStep:   MaxStep,
+			Regrid:    true,
+			Fast:      fast,
+		})
+
+		Log.Info().Msgf("[%s] Download complete. Processing parameters", m.ModelName)
+
+		for _, p := range downloadParams {
+			wg.Add(1)
 			go m.ProcessParameter(p, downloadedGribFiles, &wg)
-		} else {
+
+		}
+
+	} else {
+
+		for _, p := range downloadParams {
+			downloadedGribFiles := StartDWDDownloader(DWDOpenDataDownloaderOptions{
+				ModelName: m.ModelName,
+				Params:    []string{p},
+				MaxStep:   MaxStep,
+				Regrid:    true,
+			})
+
+			wg.Add(1)
 			m.ProcessParameter(p, downloadedGribFiles, &wg)
 		}
 
