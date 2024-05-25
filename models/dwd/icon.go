@@ -14,7 +14,7 @@ import (
 
 const (
 	TimeIntervalInMinutes = 60
-	MaxStep               = 79
+	MaxStep               = 180
 )
 
 type IconModel struct {
@@ -58,7 +58,9 @@ func (m *IconModel) GetParentModel() common.BaseModel {
 	return m.ParentModel
 }
 
-func (m *IconModel) ProcessParameter(param string, downloadedGribFiles map[string]map[int][]byte, wg *sync.WaitGroup) {
+var gribFileMutex sync.Mutex
+
+func (m *IconModel) ProcessParameter(param string, downloadedGribFiles map[string]map[int][]byte, breakPoint int, wg *sync.WaitGroup) {
 	defer wg.Done()
 	var parsedParameter common.ParameterOptions
 	var ok bool
@@ -67,35 +69,93 @@ func (m *IconModel) ProcessParameter(param string, downloadedGribFiles map[strin
 		return
 	}
 
+	newLength := breakPoint + (len(downloadedGribFiles[param])-(breakPoint+1))*3
+
+	var loadedGribFiles map[int][]byte = make(map[int][]byte, newLength)
+
+	gribFileMutex.Lock()
+	for idx, gribFile := range downloadedGribFiles[param] {
+		loadedGribFiles[idx] = gribFile
+	}
+
+	downloadedGribFiles[param] = nil
+	gribFileMutex.Unlock()
+
 	Log.Info().Msgf("[%s] Processing parameter: %s", m.ModelName, param)
 
-	if parsedParameter.StepType == common.ACCUMULATED {
+	var previousData []float64
 
-		var previousData []float64 = ndfile.ProcessGRIB(downloadedGribFiles[param][0]).DataValues
-		for step := 1; step < MaxStep; step++ {
-			gribFile := ndfile.ProcessGRIB(downloadedGribFiles[param][step])
+	for step := 0; step <= newLength; step++ {
 
-			origData := gribFile.DataValues
+		var currentGrib ndfile.GRIBFile
 
-			gribFile.ReferenceTime = gribFile.ReferenceTime.Add(time.Duration(step) * time.Hour)
+		if _, ok := loadedGribFiles[step]; !ok {
+			// Hour not available, interpolate
+			prevIndex := (step / 3) * 3
+			nextIndex := prevIndex + 3
 
-			for j := 0; j < len(gribFile.DataValues); j++ {
-				gribFile.DataValues[j] -= previousData[j]
+			if nextIndex <= newLength {
+				prevFile := ndfile.ProcessGRIB(loadedGribFiles[prevIndex])
+				nextFile := ndfile.ProcessGRIB(loadedGribFiles[nextIndex])
+
+				prevTime := prevFile.ReferenceTime
+				nextTime := nextFile.ReferenceTime
+
+				// Calculate the interpolated time
+				interpolatedTime := prevTime.Add(time.Duration(step-prevIndex) * (nextTime.Sub(prevTime) / 3))
+
+				// Interpolate DataValues
+				interpolatedDataValues := make([]float64, len(prevFile.DataValues))
+
+				if parsedParameter.InterpolationMethod == common.COPY {
+					copy(interpolatedDataValues, prevFile.DataValues)
+				} else if parsedParameter.InterpolationMethod == common.LINEAR {
+
+					for j := range interpolatedDataValues {
+						prevValue := prevFile.DataValues[j]
+						nextValue := nextFile.DataValues[j]
+						interpolatedDataValues[j] = prevValue + float64(step-prevIndex)*(nextValue-prevValue)/3
+					}
+				}
+
+				currentGrib = prevFile
+
+				copy(currentGrib.DataValues, interpolatedDataValues)
+				currentGrib.ReferenceTime = interpolatedTime
 			}
-
-			copy(origData, previousData)
-
-			m.NDFileManager.AddGrib(gribFile)
-
-			gribFile.DataValues = nil
-			gribFile = ndfile.GRIBFile{}
+		} else {
+			// Hour available
+			currentGrib = ndfile.ProcessGRIB(loadedGribFiles[step])
 		}
 
-		previousData = nil
-	} else {
-		for _, gribFile := range downloadedGribFiles[param] {
-			m.NDFileManager.AddGrib(ndfile.ProcessGRIB(gribFile))
+		if parsedParameter.StepType == common.ACCUMULATED {
+			// Accumulated data, subtract previous data
+
+			// setup previous data
+			if step == 0 {
+				previousData = currentGrib.DataValues
+			} else {
+
+				origData := currentGrib.DataValues
+
+				currentGrib.ReferenceTime = currentGrib.ReferenceTime.Add(time.Duration(step) * time.Hour)
+
+				for j := 0; j < len(currentGrib.DataValues); j++ {
+					currentGrib.DataValues[j] -= previousData[j]
+				}
+
+				copy(previousData, origData)
+
+				m.NDFileManager.AddGrib(currentGrib)
+
+				currentGrib.DataValues = nil
+				currentGrib = ndfile.GRIBFile{}
+			}
+		} else {
+			// Instantaneous data
+			m.NDFileManager.AddGrib(currentGrib)
 		}
+
 	}
 }
 
@@ -122,7 +182,7 @@ func (m *IconModel) DowloadParameter(parameter []string, fast bool) error {
 
 	if fast {
 
-		downloadedGribFiles := StartDWDDownloader(DWDOpenDataDownloaderOptions{
+		downloadedGribFiles, breakPoint := StartDWDDownloader(DWDOpenDataDownloaderOptions{
 			ModelName: m.ModelName,
 			Params:    downloadParams,
 			MaxStep:   MaxStep,
@@ -134,14 +194,13 @@ func (m *IconModel) DowloadParameter(parameter []string, fast bool) error {
 
 		for _, p := range downloadParams {
 			wg.Add(1)
-			go m.ProcessParameter(p, downloadedGribFiles, &wg)
-
+			go m.ProcessParameter(p, downloadedGribFiles, breakPoint, &wg)
 		}
 
 	} else {
 
 		for _, p := range downloadParams {
-			downloadedGribFiles := StartDWDDownloader(DWDOpenDataDownloaderOptions{
+			downloadedGribFiles, breakPoint := StartDWDDownloader(DWDOpenDataDownloaderOptions{
 				ModelName: m.ModelName,
 				Params:    []string{p},
 				MaxStep:   MaxStep,
@@ -149,7 +208,7 @@ func (m *IconModel) DowloadParameter(parameter []string, fast bool) error {
 			})
 
 			wg.Add(1)
-			m.ProcessParameter(p, downloadedGribFiles, &wg)
+			m.ProcessParameter(p, downloadedGribFiles, breakPoint, &wg)
 		}
 
 	}

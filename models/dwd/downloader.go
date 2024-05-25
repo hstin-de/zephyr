@@ -286,14 +286,14 @@ func (wdp *DWDOpenDataDownloader) DownloadStep(param string, step int, timestamp
 	return gribFile, nil
 }
 
-func StartDWDDownloader(options DWDOpenDataDownloaderOptions) map[string]map[int][]byte {
+func StartDWDDownloader(options DWDOpenDataDownloaderOptions) (map[string]map[int][]byte, int) {
 	modelDetails, exists := dwdModels[options.ModelName]
 	if !exists {
 		Log.Error().Msg("Model not found")
 		for key := range dwdModels {
 			Log.Info().Msg(key)
 		}
-		return nil
+		return nil, 0
 	}
 
 	options.ModelDetails = modelDetails
@@ -334,7 +334,7 @@ func StartDWDDownloader(options DWDOpenDataDownloaderOptions) map[string]map[int
 			mu.Lock()
 			gribFiles[p][step] = gribFile
 			mu.Unlock()
-			Log.Info().Msgf("[%s] Downloaded %s %d/%d", wdp.modelName, p, step, wdp.maxStep-1)
+			Log.Info().Msgf("[%s] Downloaded %s %d/%d", wdp.modelName, p, step+1, wdp.maxStep)
 		}
 
 		for step := wdp.modelDetails.breakPoint; step <= wdp.maxStep; step += 3 {
@@ -345,7 +345,7 @@ func StartDWDDownloader(options DWDOpenDataDownloaderOptions) map[string]map[int
 			mu.Lock()
 			gribFiles[p][step] = gribFile
 			mu.Unlock()
-			Log.Info().Msgf("[%s] Downloaded %s %d/%d", wdp.modelName, p, step, wdp.maxStep-1)
+			Log.Info().Msgf("[%s] Downloaded %s %d/%d", wdp.modelName, p, step+1, wdp.maxStep)
 		}
 	}
 
@@ -373,5 +373,5 @@ func StartDWDDownloader(options DWDOpenDataDownloaderOptions) map[string]map[int
 
 	wg.Wait()
 
-	return gribFiles
+	return gribFiles, modelDetails.breakPoint
 }
