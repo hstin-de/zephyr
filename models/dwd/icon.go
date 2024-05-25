@@ -94,6 +94,7 @@ func (m *IconModel) DowloadParameter(parameter []string, fast bool) error {
 
 		for _, p := range downloadParams {
 			wg.Add(1)
+			Log.Info().Msgf("[%s] Processing parameter: %s", m.ModelName, p)
 			go common.ProcessParameter(p, downloadedGribFiles, breakPoint, &wg, m.NDFileManager)
 		}
 
@@ -108,6 +109,7 @@ func (m *IconModel) DowloadParameter(parameter []string, fast bool) error {
 			})
 
 			wg.Add(1)
+			Log.Info().Msgf("[%s] Processing parameter: %s", m.ModelName, p)
 			common.ProcessParameter(p, downloadedGribFiles, breakPoint, &wg, m.NDFileManager)
 		}
 

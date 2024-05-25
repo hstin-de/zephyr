@@ -5,8 +5,6 @@ import (
 	"sync"
 	"time"
 
-	. "hstin/zephyr/helper"
-
 	"github.com/hstin-de/ndfile"
 	"golang.org/x/sys/unix"
 )
@@ -45,15 +43,11 @@ func ProcessParameter(param string, downloadedGribFiles map[string]map[int][]byt
 
 	var loadedGribFiles map[int][]byte = make(map[int][]byte, newLength)
 
-	// gribFileMutex.Lock()
 	for idx, gribFile := range downloadedGribFiles[param] {
 		loadedGribFiles[idx] = gribFile
 	}
 
 	downloadedGribFiles[param] = nil
-	// gribFileMutex.Unlock()
-
-	Log.Info().Msgf("[%s] Processing parameter: %s", "ModelName", param)
 
 	var previousData []float64
 
