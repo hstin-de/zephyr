@@ -6,6 +6,7 @@ import (
 
 	// . "hstin/zephyr/helper"
 	"hstin/zephyr/models/dwd"
+	"hstin/zephyr/models/noaa"
 	"math"
 	"path"
 	"sync"
@@ -18,10 +19,17 @@ var cache map[string]ndfile.NDFile = make(map[string]ndfile.NDFile)
 
 var indexCache map[string]map[int64][2]int = make(map[string]map[int64][2]int, 0)
 
+// Worldwide GFS model
+var gfsModel = noaa.NewGFSModel(noaa.GFSModelOptions{
+	RootPath:  "data",
+	ModelName: "gfs",
+})
+
 // Worldwide ICON model
 var iconModel = dwd.NewIconModel(dwd.IconModelOptions{
-	RootPath:  "data",
-	ModelName: "icon",
+	RootPath:    "data",
+	ModelName:   "icon",
+	ParentModel: gfsModel,
 })
 
 // ICON-EU model
@@ -54,6 +62,7 @@ var AvailableModels = map[string]ModelOptions{
 	"icon":    {Model: iconModel, Border: Border{LatMax: 90, LatMin: -90, LngMax: 180, LngMin: -180}},
 	"icon-eu": {Model: iconEUModel, Border: Border{LatMax: 70.5, LatMin: 29.5, LngMax: 62.5, LngMin: -23.5}},
 	"icon-d2": {Model: iconD2Model, Border: Border{LatMax: 70.5, LatMin: 29.5, LngMax: 62.5, LngMin: -23.5}},
+	"gfs":     {Model: gfsModel, Border: Border{LatMax: 90, LatMin: -90, LngMax: 180, LngMin: -180}},
 }
 
 func GetBestModel(latitude, longitude float64, preferredModel string) (common.BaseModel, string) {
@@ -120,6 +129,54 @@ func GetNDFile(model common.BaseModel, parameterID, daysSinceEpoch int) (ndfile.
 	return ndFile, model, nil
 }
 
+func GetData(model common.BaseModel, modelName string, parameterID, day, daysSinceEpochStart int, latitude, longitude float64) ([]int16, int, string, error) {
+	ndFile, fetchedModel, err := GetNDFile(model, parameterID, daysSinceEpochStart+day)
+	if err != nil {
+		return nil, 0, "", err
+	}
+
+	modelName = fetchedModel.GetModelName()
+
+	var latIndex int
+	var lngIndex int
+
+	cacheIndex := (int64(latitude/ndFile.Dx) << 32) | (int64(longitude/ndFile.Dy) & 0xFFFFFFFF)
+
+	if cachedIndex, ok := indexCache[modelName][cacheIndex]; ok {
+		latIndex = cachedIndex[0]
+		lngIndex = cachedIndex[1]
+	} else {
+		latIndex, lngIndex = ndFile.GetIndex(latitude, longitude)
+
+		if indexCache[modelName] == nil {
+			indexCache[modelName] = make(map[int64][2]int, 0)
+		}
+
+		indexCache[modelName][cacheIndex] = [2]int{latIndex, lngIndex}
+	}
+
+	values, err := ndFile.GetData(latIndex, lngIndex)
+	if err != nil {
+		return nil, 0, "", err
+	}
+
+	for _, v := range values {
+		if v == 32767 {
+
+			parentModel := model.GetParentModel()
+
+			if parentModel == nil {
+				continue
+			}
+
+			return GetData(parentModel, parentModel.GetModelName(), parameterID, day, daysSinceEpochStart, latitude, longitude)
+		}
+
+	}
+
+	return values, int(ndFile.TimeIntervalInMinutes), modelName, nil
+}
+
 func GetValues(model common.BaseModel, parameter []common.ParameterOptions, startTime time.Time, forecastDays int, latitude, longitude float64) (map[string][]float64, map[string][]float64, map[string][]string, error) {
 	daysSinceEpochStart := common.CalculateDaysSinceEpoch(startTime)
 
@@ -130,12 +187,6 @@ func GetValues(model common.BaseModel, parameter []common.ParameterOptions, star
 	var dailyData = make(map[string][]float64, len(parameter)*2)
 
 	var usedModels = make(map[string]map[string]bool, 0)
-
-	modelName := model.GetModelName()
-
-	if _, ok := indexCache[modelName]; !ok {
-		indexCache[modelName] = make(map[int64][2]int, 0)
-	}
 
 	var hourlyLock sync.Mutex
 	var dailyLock sync.Mutex
@@ -151,7 +202,7 @@ func GetValues(model common.BaseModel, parameter []common.ParameterOptions, star
 
 			for day := 0; day <= forecastDays; day++ {
 
-				ndFile, model, err := GetNDFile(model, p.ParameterID, daysSinceEpochStart+day)
+				values, timeInterval, modelName, err := GetData(model, model.GetModelName(), p.ParameterID, day, daysSinceEpochStart, latitude, longitude)
 				if err != nil {
 					continue
 				}
@@ -161,35 +212,17 @@ func GetValues(model common.BaseModel, parameter []common.ParameterOptions, star
 					usedModels[p.DisplayName] = make(map[string]bool, 0)
 				}
 
-				usedModels[p.DisplayName][model.GetModelName()] = true
+				usedModels[p.DisplayName][modelName] = true
 				usedModelsLock.Unlock()
 
 				if day == 0 {
-					steps = (24 * 60) / int(ndFile.TimeIntervalInMinutes)
+					steps = (24 * 60) / timeInterval
 
 					hourlyLock.Lock()
 					hourlyData[p.DisplayName] = make([]float64, steps*(forecastDays+1))
 					dailyData[p.DisplayName+"_min"] = make([]float64, (forecastDays + 1))
 					dailyData[p.DisplayName+"_max"] = make([]float64, (forecastDays + 1))
 					hourlyLock.Unlock()
-				}
-
-				var latIndex int
-				var lngIndex int
-
-				cacheIndex := (int64(latitude/ndFile.Dx) << 32) | (int64(longitude/ndFile.Dy) & 0xFFFFFFFF)
-
-				if cachedIndex, ok := indexCache[modelName][cacheIndex]; ok {
-					latIndex = cachedIndex[0]
-					lngIndex = cachedIndex[1]
-				} else {
-					latIndex, lngIndex = ndFile.GetIndex(latitude, longitude)
-					indexCache[modelName][cacheIndex] = [2]int{latIndex, lngIndex}
-				}
-
-				values, err := ndFile.GetData(latIndex, lngIndex)
-				if err != nil {
-					return
 				}
 
 				minValue := math.MaxFloat64
